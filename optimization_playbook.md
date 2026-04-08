@@ -1,0 +1,451 @@
+# Part 2 Optimization Playbook
+
+Three levers to reduce API turn count. System prompt changes model behavior, tool descriptions change model understanding, tool design changes what's possible in one call.
+
+
+## Lever 1: System prompt
+
+### Fill-in-the-blank skeleton
+
+```python
+SYSTEM = """
+You are a [ROLE] assistant. Use the provided tools for ALL [DOMAIN] operations.
+
+RULES:
+- NEVER do [OPERATION TYPE] in your head. Always use the [TOOL NAME] tool for any math or calculations.
+- When you need multiple independent pieces of data, request ALL relevant tools in a single response rather than one at a time.
+- [DOMAIN-SPECIFIC RULE, e.g., "Always normalize ticker symbols to lowercase."]
+- [DOMAIN-SPECIFIC RULE, e.g., "Available items: chicken_breast, salmon, brown_rice, broccoli, avocado, egg, banana."]
+
+WORKFLOW:
+1. Gather all needed data first (use parallel tool calls when data is independent)
+2. Perform any required calculations using the [TOOL NAME] tool
+3. Provide a clear, concise final answer with the specific numbers
+
+Keep your responses short and direct. Do not explain your reasoning unless asked.
+""".strip()
+```
+
+### Key phrases that reduce turns
+- "request ALL relevant tools in a single response" → enables parallel tool calls
+- "NEVER do math in your head" → forces calculator usage, prevents wrong answers
+- "Available items: ..." → prevents the model from guessing invalid inputs
+- "Keep responses short" → reduces unnecessary back-and-forth
+
+
+## Lever 2: Tool description improvements
+
+### Before (minimal, Part 1 style):
+```python
+"description": "returns the price of a stock ticker"
+```
+
+### After (optimized, Part 2 style):
+```python
+"description": (
+    "Look up the current price of a stock by its ticker symbol. "
+    "Returns the price as a float in USD. "
+    "Available tickers: aapl, msft, nvda, goog, amzn, meta, tsla. "
+    "Always pass the ticker in lowercase."
+)
+```
+
+### What to improve:
+- **Add enum constraints** to string parameters: `"enum": ["aapl", "msft", "nvda"]`
+- **List available values** in the description when the tool searches a fixed dataset
+- **Explain what the tool returns** so the model knows what to expect
+- **Explain when to use this tool** vs. other tools
+- **Add input format guidance**: "pass as lowercase", "use ISO date format", etc.
+- **Improve parameter descriptions**: `"description": "input1"` → `"description": "The first number in the calculation"`
+
+
+## Lever 3: Tool redesign patterns
+
+The biggest turn-count reduction comes from merging multiple tools into one so the model can accomplish in one call what previously took 3-4.
+
+---
+
+### Pattern 1: Retrieve + Math
+
+**When to use:** They give you a lookup tool and a separate calculator tool, and prompts require looking up multiple values then computing on them.
+
+**The merge:** One tool that accepts a list of keys and an optional math operation.
+
+```python
+def compute_item_math(tool_input):
+    items = tool_input.get("items", [])
+    op = tool_input.get("op")
+
+    catalog = {
+        "item_a": 195.50,
+        "item_b": 425.30,
+        "item_c": 875.20,
+        "item_d": 162.75,
+        "item_e": 185.40,
+    }
+
+    # Look up all values
+    values_by_name = {}
+    value_list = []
+    for item in items:
+        key = item.lower()
+        if key not in catalog:
+            return {"error": "Unknown item: " + item}
+        values_by_name[key] = catalog[key]
+        value_list.append(catalog[key])
+
+    # If no operation, just return the values
+    if op is None:
+        return values_by_name
+
+    # Apply the operation
+    if len(value_list) == 0:
+        return {"error": "No items provided"}
+
+    if op == "sum":
+        result = sum(value_list)
+    elif op == "average":
+        result = sum(value_list) / len(value_list)
+    elif op == "max":
+        result = max(value_list)
+    elif op == "min":
+        result = min(value_list)
+    elif op == "difference":
+        if len(value_list) < 2:
+            return {"error": "Need at least 2 items for difference"}
+        result = abs(value_list[0] - value_list[1])
+    else:
+        return {"error": "Unknown operation: " + str(op)}
+
+    return {"result": round(result, 2), "values": values_by_name}
+
+
+compute_item_math_spec = {
+    "name": "compute_item_math",
+    "description": (
+        "Look up values for one or more items, and optionally apply a math operation. "
+        "Use this for ANY lookup or calculation instead of calling lookup and calculate separately. "
+        "Available items: item_a, item_b, item_c, item_d, item_e."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "items": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "List of item names to look up.",
+            },
+            "op": {
+                "type": "string",
+                "enum": ["sum", "average", "max", "min", "difference"],
+                "description": "Optional math operation to apply across the values.",
+            },
+        },
+        "required": ["items"],
+    },
+}
+```
+
+---
+
+### Pattern 2: Search + Filter
+
+**When to use:** They give you a search tool and a separate filter tool, and prompts require searching then narrowing results.
+
+**The merge:** One tool with the search query plus optional filter parameters.
+
+```python
+def search_catalog(tool_input):
+    query = str(tool_input.get("query", "")).strip().lower()
+    category = tool_input.get("category")
+    max_price = tool_input.get("max_price")
+    min_rating = tool_input.get("min_rating")
+
+    catalog = [
+        {"id": "P-1", "name": "Wireless Headphones", "category": "electronics", "price": 79.99, "rating": 4.5},
+        {"id": "P-2", "name": "Running Shoes", "category": "apparel", "price": 120.00, "rating": 4.2},
+        {"id": "P-3", "name": "Yoga Mat", "category": "fitness", "price": 35.00, "rating": 4.8},
+        {"id": "P-4", "name": "Bluetooth Speaker", "category": "electronics", "price": 45.00, "rating": 3.9},
+        {"id": "P-5", "name": "Water Bottle", "category": "fitness", "price": 18.00, "rating": 4.6},
+    ]
+
+    # Search by query (substring match on name and category)
+    results = []
+    for p in catalog:
+        if query in p["name"].lower() or query in p["category"].lower():
+            results.append(p)
+
+    # Apply optional filters
+    filtered = []
+    for p in results:
+        if category and p["category"] != category.lower():
+            continue
+        if max_price is not None and p["price"] > float(max_price):
+            continue
+        if min_rating is not None and p["rating"] < float(min_rating):
+            continue
+        filtered.append(p)
+
+    return {"results": filtered, "count": len(filtered)}
+
+
+search_catalog_spec = {
+    "name": "search_catalog",
+    "description": (
+        "Search the product catalog by keyword, with optional filters. "
+        "Use this instead of calling search and filter separately. "
+        "Categories: electronics, apparel, fitness."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "query": {"type": "string", "description": "Search keyword."},
+            "category": {
+                "type": "string",
+                "enum": ["electronics", "apparel", "fitness"],
+                "description": "Optional category filter.",
+            },
+            "max_price": {"type": "number", "description": "Optional maximum price."},
+            "min_rating": {"type": "number", "description": "Optional minimum rating."},
+        },
+        "required": ["query"],
+    },
+}
+```
+
+---
+
+### Pattern 3: Lookup + Validate + Act
+
+**When to use:** The prompt requires looking something up, checking a condition, then performing an action. Three separate tools become one gated tool.
+
+**The merge:** One tool that does lookup → validation → action internally, returning the appropriate result at each gate.
+
+```python
+def process_item_return(tool_input):
+    order_id = str(tool_input.get("order_id", "")).strip()
+    item_id = str(tool_input.get("item_id", "")).strip()
+    reason = str(tool_input.get("reason", "")).strip()
+
+    if not order_id or not item_id or not reason:
+        return {"error": "Missing required field(s)"}
+
+    # Step 1: Lookup
+    order = ORDERS.get(order_id)
+    if not order:
+        return {"status": "rejected", "reason": "order_not_found"}
+
+    # Step 2: Find the item in the order
+    item = None
+    for it in order.get("items", []):
+        if it.get("item_id") == item_id:
+            item = it
+    if not item:
+        return {"status": "rejected", "reason": "item_not_in_order"}
+
+    # Step 3: Validate against policy
+    if item.get("final_sale"):
+        return {"status": "rejected", "reason": "final_sale", "item": item}
+    if not item.get("returnable"):
+        return {"status": "rejected", "reason": "not_returnable", "item": item}
+
+    # Step 4: Act — compute refund
+    refund = item["unit_price"] * item["qty"]
+    fee_pct = item.get("restocking_fee_pct", 0)
+    if fee_pct > 0:
+        refund = refund * (1 - fee_pct / 100)
+
+    return {
+        "status": "approved",
+        "item": item,
+        "refund_amount": round(refund, 2),
+        "restocking_fee_pct": fee_pct,
+    }
+
+
+process_item_return_spec = {
+    "name": "process_item_return",
+    "description": (
+        "Look up an order, validate an item against return policy, and process the return in one step. "
+        "Use this instead of calling lookup, validate, and process separately."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "order_id": {"type": "string", "description": "The order ID."},
+            "item_id": {"type": "string", "description": "The item ID within the order."},
+            "reason": {"type": "string", "description": "Reason for the return."},
+        },
+        "required": ["order_id", "item_id", "reason"],
+    },
+}
+```
+
+---
+
+### Pattern 4: Batch Operations
+
+**When to use:** They give you a single-item tool (e.g., add one expense) and test prompts require adding multiple items. Turn it into one call with an array.
+
+```python
+LEDGER = []
+ENTRY_COUNTER = 0
+
+def manage_expenses(tool_input):
+    global ENTRY_COUNTER
+    action = str(tool_input.get("action", "")).strip()
+
+    if action == "add":
+        entries = tool_input.get("entries", [])
+        if not entries:
+            return {"error": "No entries provided"}
+
+        added = []
+        for e in entries:
+            ENTRY_COUNTER = ENTRY_COUNTER + 1
+            record = {
+                "entry_id": "EXP-{}".format(ENTRY_COUNTER),
+                "amount": float(e.get("amount", 0)),
+                "category": str(e.get("category", "other")),
+                "description": str(e.get("description", "")),
+            }
+            LEDGER.append(record)
+            added.append(record)
+        return {"added": added, "total_entries": len(LEDGER)}
+
+    elif action == "summary":
+        totals = {}
+        for e in LEDGER:
+            cat = e["category"]
+            totals[cat] = totals.get(cat, 0) + e["amount"]
+        return {
+            "totals_by_category": totals,
+            "grand_total": sum(totals.values()),
+            "entry_count": len(LEDGER),
+        }
+
+    elif action == "list":
+        category = tool_input.get("category")
+        if category:
+            filtered = []
+            for e in LEDGER:
+                if e["category"] == category:
+                    filtered.append(e)
+        else:
+            filtered = list(LEDGER)
+        return {"entries": filtered, "count": len(filtered)}
+
+    else:
+        return {"error": "Unknown action: " + action}
+
+
+manage_expenses_spec = {
+    "name": "manage_expenses",
+    "description": (
+        "Add, list, or summarize expenses in one tool call. "
+        "For 'add': pass an array of entries to add multiple at once. "
+        "For 'summary': returns totals by category. "
+        "For 'list': optionally filter by category."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "action": {
+                "type": "string",
+                "enum": ["add", "summary", "list"],
+                "description": "What to do.",
+            },
+            "entries": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "amount": {"type": "number"},
+                        "category": {"type": "string"},
+                        "description": {"type": "string"},
+                    },
+                    "required": ["amount", "category"],
+                },
+                "description": "Entries to add (only for action='add').",
+            },
+            "category": {
+                "type": "string",
+                "description": "Filter category (only for action='list').",
+            },
+        },
+        "required": ["action"],
+    },
+}
+```
+
+---
+
+### Pattern 5: Compare Entities
+
+**When to use:** They give you a single-item lookup and the prompt asks "compare X vs Y" or "which is better, X or Y?" Turn it into one call that accepts a list.
+
+```python
+def compare_plans(tool_input):
+    plan_names = tool_input.get("plans", [])
+    if len(plan_names) < 2:
+        return {"error": "Provide at least 2 plan names to compare"}
+
+    catalog = {
+        "starter": {"name": "Starter", "price": 0, "seats": 1, "storage_gb": 5},
+        "pro": {"name": "Pro", "price": 29, "seats": 10, "storage_gb": 100},
+        "enterprise": {"name": "Enterprise", "price": 99, "seats": 999, "storage_gb": 1000},
+    }
+
+    # Look up all plans
+    plans = {}
+    for name in plan_names:
+        p = catalog.get(name.lower())
+        if not p:
+            return {"error": "Unknown plan: " + name}
+        plans[name.lower()] = p
+
+    # Build comparison between first two
+    names = list(plans.keys())
+    a = plans[names[0]]
+    b = plans[names[1]]
+
+    return {
+        "plans": plans,
+        "price_difference": abs(a["price"] - b["price"]),
+        "seat_difference": abs(a["seats"] - b["seats"]),
+        "storage_difference_gb": abs(a["storage_gb"] - b["storage_gb"]),
+    }
+
+
+compare_plans_spec = {
+    "name": "compare_plans",
+    "description": (
+        "Look up two or more plans and return a structured comparison. "
+        "Use this instead of calling get_plan multiple times. "
+        "Available plans: starter, pro, enterprise."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "plans": {
+                "type": "array",
+                "items": {"type": "string"},
+                "description": "Plan names to compare.",
+            },
+        },
+        "required": ["plans"],
+    },
+}
+```
+
+---
+
+## Quick decision guide: which pattern do I need?
+
+| The exercise gives you... | The prompt requires... | Use pattern |
+|---|---|---|
+| Lookup tool + calculator tool | Look up values then do math on them | **1: Retrieve + Math** |
+| Search tool + filter tool | Search then narrow results | **2: Search + Filter** |
+| Lookup + check + action as 3 tools | Multi-step gated workflow | **3: Lookup + Validate + Act** |
+| Single-item add/create tool | Adding multiple items at once | **4: Batch Operations** |
+| Single-item lookup tool | "Compare X vs Y" or "which is more" | **5: Compare Entities** |
