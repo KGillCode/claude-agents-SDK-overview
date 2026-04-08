@@ -27,8 +27,6 @@ CODESIGNAL ENVIRONMENT NOTES:
   - pip install works: run in terminal if a package is missing
   - Filesystem-based: code may be in .py files, not notebook cells
   - To run: use the terminal with `python filename.py`
-  - No autorun on save — you must manually run each time
-  - The interviewer sees your screen AND your terminal output
   - If system prompt is in a separate file:
       from system_prompt import SYSTEM
     or just open the file, copy the string, and edit it inline
