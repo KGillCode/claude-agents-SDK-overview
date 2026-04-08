@@ -111,3 +111,19 @@ for block in response.content:
     if block.type == "tool_use":
         tool_uses.append(block)
 ```
+
+
+## tool_choice (controlling tool use behavior)
+
+Pass as a parameter to `client.messages.create()` or mention to interviewer as a follow-up.
+
+```python
+tool_choice={"type": "auto"}                                    # Default: model decides
+tool_choice={"type": "any"}                                     # Must use at least 1 tool
+tool_choice={"type": "tool", "name": "calculate"}               # Must use this specific tool
+tool_choice={"type": "none"}                                    # No tools allowed
+tool_choice={"type": "any", "disable_parallel_tool_use": True}  # Exactly 1 tool call
+tool_choice={"type": "auto", "disable_parallel_tool_use": True} # At most 1 tool call
+```
+
+Gotcha: with `"any"` or `"tool"`, Claude skips explanatory text and goes straight to the tool call.

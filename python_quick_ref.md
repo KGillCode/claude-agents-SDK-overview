@@ -153,3 +153,35 @@ def my_tool(tool_input):
 | `NameError: name 'X' not defined` | Variable/function not defined or cell not run | Check spelling, run the cell that defines it |
 | `IndentationError` | Mixed tabs/spaces or wrong nesting | Re-type the indentation with spaces |
 | `AttributeError: 'X' has no attribute 'Y'` | Accessing wrong attribute on an object | Check the object type — TextBlock has .text, ToolUseBlock has .name/.input/.id |
+
+
+## match/case syntax (Python 3.10+)
+
+The interview exercise may use this for a calculator tool. It's Python's version of a switch statement.
+
+```python
+match op:
+    case "+":
+        return input1 + input2
+    case "-":
+        return input1 - input2
+    case "*":
+        return input1 * input2
+    case "/":
+        return input1 / input2
+```
+
+You don't need to write match/case yourself — `if/elif` works identically and is what you've memorized. But recognize it when you see it in the provided code.
+
+
+## **kwargs unpacking
+
+You may see this in provided example code:
+
+```python
+get_stock_price(**tool_call.input)
+# is equivalent to:
+get_stock_price(ticker=tool_call.input["ticker"])
+```
+
+`**dict` unpacks a dict into keyword arguments. It works when the dict keys match the function parameter names exactly. Your dispatch approach (explicitly extracting each parameter) is safer and more readable for the interview.

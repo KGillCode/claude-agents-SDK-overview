@@ -5,11 +5,33 @@ A complete tool-using agent loop for the Anthropic Messages API.
 Uses if/elif dispatch, json.dumps for tool results, and four
 commented-out debug prints in the correct positions.
 
-ENVIRONMENT ADAPTATION:
-  If a call_claude(messages, tools) helper is pre-provided,
-  replace the client.messages.create(...) call with:
+ENVIRONMENT ADAPTATION (side by side):
+
+  Production (this file):
+      response = client.messages.create(**BASE_REQUEST, messages=messages)
+
+  Interview (with pre-provided call_claude helper):
       response = call_claude(messages, tools)
-  and remove the BASE_REQUEST / client setup.
+
+  If call_claude is provided, you don't need: client, MODEL, SYSTEM,
+  BASE_REQUEST, or the anthropic import. Just use call_claude directly.
+
+  To change the system prompt for Part 2, either:
+    (a) Edit the system= line inside call_claude directly, or
+    (b) Copy call_claude, rename it, and change the system= line, or
+    (c) If system prompt is in a separate file, edit that file
+
+CODESIGNAL ENVIRONMENT NOTES:
+  - Full Ubuntu Linux environment with terminal access
+  - Python 3.10.6 — match/case syntax IS supported (Python 3.10+)
+  - pip install works: run in terminal if a package is missing
+  - Filesystem-based: code may be in .py files, not notebook cells
+  - To run: use the terminal with `python filename.py`
+  - No autorun on save — you must manually run each time
+  - The interviewer sees your screen AND your terminal output
+  - If system prompt is in a separate file:
+      from system_prompt import SYSTEM
+    or just open the file, copy the string, and edit it inline
 """
 
 import json

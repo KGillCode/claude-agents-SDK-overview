@@ -449,3 +449,216 @@ compare_plans_spec = {
 | Lookup + check + action as 3 tools | Multi-step gated workflow | **3: Lookup + Validate + Act** |
 | Single-item add/create tool | Adding multiple items at once | **4: Batch Operations** |
 | Single-item lookup tool | "Compare X vs Y" or "which is more" | **5: Compare Entities** |
+
+
+## Combining patterns
+
+Real exercises may need a mix of patterns. Here are the most likely combos:
+
+### Combo A: Retrieve + Math + Compare (Patterns 1 + 5)
+
+**When:** "Which of X, Y, Z is the most expensive, and by how much?"
+
+Merge into one tool that accepts a list of items and an operation that includes comparison:
+
+```python
+def analyze_items(tool_input):
+    items = tool_input.get("items", [])
+    op = tool_input.get("op")
+
+    catalog = {
+        "item_a": 195.50, "item_b": 425.30, "item_c": 875.20,
+        "item_d": 162.75, "item_e": 185.40,
+    }
+
+    values_by_name = {}
+    value_list = []
+    for item in items:
+        key = item.lower()
+        if key not in catalog:
+            return {"error": "Unknown item: " + item}
+        values_by_name[key] = catalog[key]
+        value_list.append(catalog[key])
+
+    if op is None:
+        return values_by_name
+
+    if len(value_list) == 0:
+        return {"error": "No items provided"}
+
+    if op == "sum":
+        result = sum(value_list)
+    elif op == "average":
+        result = sum(value_list) / len(value_list)
+    elif op == "max":
+        result = max(value_list)
+    elif op == "min":
+        result = min(value_list)
+    elif op == "difference":
+        if len(value_list) < 2:
+            return {"error": "Need at least 2 items"}
+        result = abs(value_list[0] - value_list[1])
+    elif op == "compare":
+        # Find highest and lowest
+        highest_name = ""
+        highest_val = -1
+        lowest_name = ""
+        lowest_val = float("inf")
+        for name in values_by_name:
+            v = values_by_name[name]
+            if v > highest_val:
+                highest_val = v
+                highest_name = name
+            if v < lowest_val:
+                lowest_val = v
+                lowest_name = name
+        result = {
+            "highest": {"name": highest_name, "value": highest_val},
+            "lowest": {"name": lowest_name, "value": lowest_val},
+            "spread": round(highest_val - lowest_val, 2),
+        }
+        return {"comparison": result, "values": values_by_name}
+    else:
+        return {"error": "Unknown operation: " + str(op)}
+
+    return {"result": round(result, 2), "values": values_by_name}
+```
+
+Spec adds `"compare"` to the enum:
+```python
+"op": {
+    "type": "string",
+    "enum": ["sum", "average", "max", "min", "difference", "compare"],
+    "description": "Operation to apply. Use 'compare' to find highest/lowest.",
+},
+```
+
+### Combo B: Search + Filter + Act (Patterns 2 + 3)
+
+**When:** "Find available flights under $300 and book the cheapest one."
+
+Merge search/filter into one tool, and add an optional `book` action:
+
+```python
+def search_and_book(tool_input):
+    query = str(tool_input.get("query", "")).strip().lower()
+    max_price = tool_input.get("max_price")
+    book_id = tool_input.get("book_id")
+
+    catalog = [
+        {"id": "F-1", "route": "SFO-JFK", "price": 320.00, "available": True},
+        {"id": "F-2", "route": "SFO-JFK", "price": 210.00, "available": True},
+        {"id": "F-3", "route": "SFO-LAX", "price": 89.00, "available": False},
+        {"id": "F-4", "route": "LAX-JFK", "price": 275.00, "available": True},
+    ]
+
+    # If booking, handle that first
+    if book_id:
+        match = None
+        for f in catalog:
+            if f["id"] == book_id:
+                match = f
+        if not match:
+            return {"status": "error", "reason": "Flight not found: " + book_id}
+        if not match["available"]:
+            return {"status": "error", "reason": "Flight not available"}
+        return {"status": "booked", "flight": match, "confirmation": "BK-9901"}
+
+    # Otherwise, search and filter
+    results = []
+    for f in catalog:
+        if query in f["route"].lower():
+            if max_price is not None and f["price"] > float(max_price):
+                continue
+            results.append(f)
+
+    return {"results": results, "count": len(results)}
+```
+
+### Combo C: Batch + Compute (Patterns 4 + 1)
+
+**When:** "Add these 5 expenses and tell me the total by category."
+
+The batch pattern already supports this — the `"summary"` action computes aggregates. Just make sure the spec description says "use action='add' to add multiple entries, then action='summary' to get totals."
+
+### Combo D: Lookup + Compare (Patterns 3 + 5)
+
+**When:** "Look up customer A and customer B and tell me which one has a higher plan tier."
+
+```python
+def compare_customers(tool_input):
+    emails = tool_input.get("emails", [])
+    if len(emails) < 2:
+        return {"error": "Provide at least 2 emails"}
+
+    customers = {}
+    for email in emails:
+        rec = CUSTOMER_DATA.get(email.lower())
+        if not rec:
+            return {"error": "Customer not found: " + email}
+        customers[email.lower()] = rec
+
+    # Build comparison
+    names = list(customers.keys())
+    plan_tiers = {"free": 0, "starter": 1, "pro": 2, "enterprise": 3}
+
+    a = customers[names[0]]
+    b = customers[names[1]]
+    a_tier = plan_tiers.get(a.get("plan", "free"), 0)
+    b_tier = plan_tiers.get(b.get("plan", "free"), 0)
+
+    if a_tier > b_tier:
+        higher = names[0]
+    elif b_tier > a_tier:
+        higher = names[1]
+    else:
+        higher = "same"
+
+    return {
+        "customers": customers,
+        "higher_plan": higher,
+        "plans": {names[0]: a.get("plan"), names[1]: b.get("plan")},
+    }
+```
+
+
+## Important: modifying the system prompt in the interview
+
+The pre-provided `call_claude` helper hardcodes the system prompt. To change it for Part 2:
+
+**Option A** — Edit `call_claude` directly (simplest):
+```python
+def call_claude(messages, tools=[]):
+    return client.messages.create(
+        model="claude-3-5-haiku-20241022",
+        max_tokens=1024,
+        temperature=0.0,
+        system="""
+You are a helpful financial assistant. Use tools for ALL calculations.
+NEVER do math in your head. Always use the calculate tool.
+When you need multiple stock prices, request ALL lookups in a single response.
+""".strip(),
+        tools=tools,
+        messages=messages,
+    )
+```
+
+**Option B** — If system prompt is in a separate file:
+```python
+# Open the file in the IDE, edit the string, save
+# or import and override:
+SYSTEM = """Your new system prompt here.""".strip()
+```
+
+**Option C** — Add a system parameter to call_claude:
+```python
+def call_claude(messages, tools=[], system="You are a helpful assistant."):
+    return client.messages.create(
+        model="claude-3-5-haiku-20241022",
+        max_tokens=1024,
+        temperature=0.0,
+        system=system,
+        tools=tools,
+        messages=messages,
+    )
+```
