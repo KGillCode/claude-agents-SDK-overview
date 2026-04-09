@@ -65,6 +65,35 @@ The biggest turn-count reduction comes from merging multiple tools into one so t
 
 ---
 
+### Building block A: Expression-Based Calculator
+
+**When to use:** They give you a calculator tool that takes two numbers and an operator. Replace it with one that takes a full expression string — collapses multi-step arithmetic into a single tool call.
+
+```python
+def evaluate(expression: str):
+    allowed = set("0123456789+-*/.() ")
+    if all(c in allowed for c in expression):
+        return eval(expression)
+    raise ValueError("Invalid expression")
+```
+
+One call handles the full expression: `(195.50 + 162.75 + 425.30) / 3`
+
+---
+
+### Building block B: Batch Lookup Tool
+
+**When to use:** They give you a single-item lookup tool (e.g., get one stock price). Replace it with one that accepts a list — returns all values in one call, eliminates multiple parallel lookups.
+
+```python
+def get_stock_prices(tickers: list[str]):
+    return {t: stocks[t.lower()] for t in tickers}
+```
+
+Spec param: `"type": "array", "items": {"type": "string"}`
+
+---
+
 ### Pattern 1: Retrieve + Math
 
 **When to use:** They give you a lookup tool and a separate calculator tool, and prompts require looking up multiple values then computing on them.
