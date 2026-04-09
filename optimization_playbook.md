@@ -14,7 +14,7 @@ You are a [ROLE] assistant. Use the provided tools for ALL [DOMAIN] operations.
 RULES:
 - NEVER do [OPERATION TYPE] in your head. Always use the [TOOL NAME] tool for any math or calculations.
 - When you need multiple independent pieces of data, request ALL relevant tools in a single response rather than one at a time.
-- [DOMAIN-SPECIFIC RULE, e.g., "Always normalize ticker symbols to lowercase."]
+- [DOMAIN-SPECIFIC RULE, e.g., "Always normalize city names to lowercase."]
 - [DOMAIN-SPECIFIC RULE, e.g., "Available items: chicken_breast, salmon, brown_rice, broccoli, avocado, egg, banana."]
 
 WORKFLOW:
@@ -37,21 +37,21 @@ Keep your responses short and direct. Do not explain your reasoning unless asked
 
 ### Before (minimal, Part 1 style):
 ```python
-"description": "returns the price of a stock ticker"
+"description": "returns the current temperature for a city"
 ```
 
 ### After (optimized, Part 2 style):
 ```python
 "description": (
-    "Look up the current price of a stock by its ticker symbol. "
-    "Returns the price as a float in USD. "
-    "Available tickers: aapl, msft, nvda, goog, amzn, meta, tsla. "
-    "Always pass the ticker in lowercase."
+    "Look up the current temperature for a city by name. "
+    "Returns the temperature as a float in Fahrenheit. "
+    "Available cities: denver, seattle, phoenix, miami, chicago, boston, portland. "
+    "Always pass the city name in lowercase."
 )
 ```
 
 ### What to improve:
-- **Add enum constraints** to string parameters: `"enum": ["aapl", "msft", "nvda"]`
+- **Add enum constraints** to string parameters: `"enum": ["denver", "seattle", "phoenix"]`
 - **List available values** in the description when the tool searches a fixed dataset
 - **Explain what the tool returns** so the model knows what to expect
 - **Explain when to use this tool** vs. other tools
@@ -77,17 +77,17 @@ def evaluate(expression: str):
     raise ValueError("Invalid expression")
 ```
 
-One call handles the full expression: `(300.90 + 522.25 + 147.50) / 3`
+One call handles the full expression: `(247.80 + 198.35 + 389.60) / 3`
 
 ---
 
 ### Building block B: Batch Lookup Tool
 
-**When to use:** They give you a single-item lookup tool (e.g., get one item price). Replace it with one that accepts a list — returns all values in one call, eliminates multiple parallel lookups.
+**When to use:** They give you a single-item lookup tool (e.g., get one city's temperature). Replace it with one that accepts a list — returns all values in one call, eliminates multiple parallel lookups.
 
 ```python
-def get_item_prices(SKUs: list[str]):
-    return {s: items[s.lower()] for s in SKUs}
+def get_weather_data(cities: list[str]):
+    return {c: weather_db[c.lower()] for c in cities}
 ```
 
 Spec param: `"type": "array", "items": {"type": "string"}`
@@ -106,11 +106,11 @@ def compute_item_math(tool_input):
     op = tool_input.get("op")
 
     catalog = {
-        "item_a": 195.50,
-        "item_b": 425.30,
-        "item_c": 875.20,
-        "item_d": 162.75,
-        "item_e": 185.40,
+        "item_a": 247.80,
+        "item_b": 389.60,
+        "item_c": 712.50,
+        "item_d": 198.35,
+        "item_e": 223.90,
     }
 
     # Look up all values
@@ -191,11 +191,11 @@ def search_catalog(tool_input):
     min_rating = tool_input.get("min_rating")
 
     catalog = [
-        {"id": "P-1", "name": "Wireless Headphones", "category": "electronics", "price": 79.99, "rating": 4.5},
-        {"id": "P-2", "name": "Running Shoes", "category": "apparel", "price": 120.00, "rating": 4.2},
-        {"id": "P-3", "name": "Yoga Mat", "category": "fitness", "price": 35.00, "rating": 4.8},
-        {"id": "P-4", "name": "Bluetooth Speaker", "category": "electronics", "price": 45.00, "rating": 3.9},
-        {"id": "P-5", "name": "Water Bottle", "category": "fitness", "price": 18.00, "rating": 4.6},
+        {"id": "P-1", "name": "Wireless Headphones", "category": "electronics", "price": 64.99, "rating": 4.3},
+        {"id": "P-2", "name": "Running Shoes", "category": "apparel", "price": 95.00, "rating": 4.7},
+        {"id": "P-3", "name": "Yoga Mat", "category": "fitness", "price": 42.00, "rating": 4.5},
+        {"id": "P-4", "name": "Bluetooth Speaker", "category": "electronics", "price": 54.00, "rating": 3.7},
+        {"id": "P-5", "name": "Water Bottle", "category": "fitness", "price": 22.00, "rating": 4.4},
     ]
 
     # Search by query (substring match on name and category)
@@ -280,7 +280,7 @@ def process_item_return(tool_input):
 
     # Step 4: Act — compute refund
     refund = item["unit_price"] * item["qty"]
-    fee_pct = item.get("restocking_fee_pct", 0)
+    fee_pct = item.get("handling_fee_pct", 0)
     if fee_pct > 0:
         refund = refund * (1 - fee_pct / 100)
 
@@ -288,7 +288,7 @@ def process_item_return(tool_input):
         "status": "approved",
         "item": item,
         "refund_amount": round(refund, 2),
-        "restocking_fee_pct": fee_pct,
+        "handling_fee_pct": fee_pct,
     }
 
 
@@ -420,9 +420,9 @@ def compare_plans(tool_input):
         return {"error": "Provide at least 2 plan names to compare"}
 
     catalog = {
-        "starter": {"name": "Starter", "price": 0, "seats": 1, "storage_gb": 5},
-        "pro": {"name": "Pro", "price": 29, "seats": 10, "storage_gb": 100},
-        "enterprise": {"name": "Enterprise", "price": 99, "seats": 999, "storage_gb": 1000},
+        "starter": {"name": "Starter", "price": 0, "seats": 1, "storage_gb": 10},
+        "pro": {"name": "Pro", "price": 39, "seats": 15, "storage_gb": 250},
+        "enterprise": {"name": "Enterprise", "price": 119, "seats": 500, "storage_gb": 2000},
     }
 
     # Look up all plans
@@ -496,8 +496,8 @@ def analyze_items(tool_input):
     op = tool_input.get("op")
 
     catalog = {
-        "item_a": 195.50, "item_b": 425.30, "item_c": 875.20,
-        "item_d": 162.75, "item_e": 185.40,
+        "item_a": 247.80, "item_b": 389.60, "item_c": 712.50,
+        "item_d": 198.35, "item_e": 223.90,
     }
 
     values_by_name = {}
@@ -564,7 +564,7 @@ Spec adds `"compare"` to the enum:
 
 ### Combo B: Search + Filter + Act (Patterns 2 + 3)
 
-**When:** "Find available flights under $300 and book the cheapest one."
+**When:** "Find available flights under $350 and book the cheapest one."
 
 Merge search/filter into one tool, and add an optional `book` action:
 
@@ -575,10 +575,10 @@ def search_and_book(tool_input):
     book_id = tool_input.get("book_id")
 
     catalog = [
-        {"id": "F-1", "route": "SFO-JFK", "price": 320.00, "available": True},
-        {"id": "F-2", "route": "SFO-JFK", "price": 210.00, "available": True},
-        {"id": "F-3", "route": "SFO-LAX", "price": 89.00, "available": False},
-        {"id": "F-4", "route": "LAX-JFK", "price": 275.00, "available": True},
+        {"id": "F-1", "route": "SFO-JFK", "price": 385.00, "available": True},
+        {"id": "F-2", "route": "SFO-JFK", "price": 245.00, "available": True},
+        {"id": "F-3", "route": "SFO-LAX", "price": 115.00, "available": False},
+        {"id": "F-4", "route": "LAX-JFK", "price": 310.00, "available": True},
     ]
 
     # If booking, handle that first
@@ -591,7 +591,7 @@ def search_and_book(tool_input):
             return {"status": "error", "reason": "Flight not found: " + book_id}
         if not match["available"]:
             return {"status": "error", "reason": "Flight not available"}
-        return {"status": "booked", "flight": match, "confirmation": "BK-9901"}
+        return {"status": "booked", "flight": match, "confirmation": "BK-7742"}
 
     # Otherwise, search and filter
     results = []
@@ -663,9 +663,9 @@ def call_claude(messages, tools=[]):
         max_tokens=1024,
         temperature=0.0,
         system="""
-You are a helpful financial assistant. Use tools for ALL calculations.
+You are a helpful travel planning assistant. Use tools for ALL calculations.
 NEVER do math in your head. Always use the calculate tool.
-When you need multiple stock prices, request ALL lookups in a single response.
+When you need temperatures for multiple cities, request ALL lookups in a single response.
 """.strip(),
         tools=tools,
         messages=messages,

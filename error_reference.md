@@ -17,7 +17,7 @@ The response was cut off before the model finished. Increase `max_tokens` in the
 **`TypeError: Object of type X is not JSON serializable`**
 You're passing something to `json.dumps()` that can't be serialized (often an SDK object). Use `json.dumps(result, default=str)` as a safety net, or make sure your tool function returns a plain dict with only strings, numbers, booleans, lists, dicts, and None.
 
-**`KeyError: 'ticker'`**
+**`KeyError: 'city'`**
 The model didn't send that parameter, or the key name doesn't match. Use `tool_input.get("key")` instead of `tool_input["key"]` for optional parameters. For required parameters, check that the key name in your code matches exactly what's in the tool spec's `properties`.
 
 **`NameError: name 'X' is not defined`**
@@ -42,4 +42,4 @@ Check the three layers in order: (1) Does the function body actually use all par
 Your dispatch function doesn't have a branch for that tool name. Add an `elif name == "X":` branch. Make sure the tool name string matches exactly (case-sensitive).
 
 **Simulated data lookup returns nothing**
-Check key format: if the dict keys are lowercase (`"aapl"`) but the model sends uppercase (`"AAPL"`), use `.lower()` before the lookup.
+Check key format: if the dict keys are lowercase (`"denver"`) but the model sends uppercase (`"Denver"`), use `.lower()` before the lookup.

@@ -20,13 +20,13 @@ s.upper()                   # uppercase
 **Order matters:**
 ```python
 # WRONG — validates before normalizing:
-if ticker not in stocks:    # "AAPL" not in {"aapl": ...} → fails
+if city not in weather_db:    # "Denver" not in {"denver": ...} → fails
     return {"error": "..."}
-ticker = ticker.lower()
+city = city.lower()
 
 # RIGHT — normalize first:
-ticker = ticker.lower()
-if ticker not in stocks:    # "aapl" in {"aapl": ...} → works
+city = city.lower()
+if city not in weather_db:    # "denver" in {"denver": ...} → works
     return {"error": "..."}
 ```
 
@@ -148,7 +148,7 @@ def my_tool(tool_input):
 
 | Error | Cause | Fix |
 |---|---|---|
-| `KeyError: 'ticker'` | Dict key doesn't exist | Use `.get("key")` or check `if key in dict` first |
+| `KeyError: 'city'` | Dict key doesn't exist | Use `.get("key")` or check `if key in dict` first |
 | `TypeError: not JSON serializable` | Passing non-serializable to json.dumps | Add `default=str` or convert the value first |
 | `NameError: name 'X' not defined` | Variable/function not defined or cell not run | Check spelling, run the cell that defines it |
 | `IndentationError` | Mixed tabs/spaces or wrong nesting | Re-type the indentation with spaces |
@@ -179,9 +179,9 @@ You don't need to write match/case yourself — `if/elif` works identically and 
 You may see this in provided example code:
 
 ```python
-get_stock_price(**tool_call.input)
+get_weather(**tool_call.input)
 # is equivalent to:
-get_stock_price(ticker=tool_call.input["ticker"])
+get_weather(city=tool_call.input["city"])
 ```
 
 `**dict` unpacks a dict into keyword arguments. It works when the dict keys match the function parameter names exactly. Your dispatch approach (explicitly extracting each parameter) is safer and more readable for the interview.
