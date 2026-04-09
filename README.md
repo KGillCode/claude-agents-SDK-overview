@@ -84,3 +84,69 @@ Reference implementations and patterns for building tool-using agents with the A
 - [How to implement tool use](https://docs.anthropic.com/en/docs/agents-and-tools/tool-use/implement-tool-use)
 - [Anthropic Python SDK](https://github.com/anthropics/anthropic-sdk-python)
 - [Agent SDK overview](https://docs.anthropic.com/en/docs/agents-and-tools/tool-use/overview)
+
+
+---
+
+## Cheat sheet
+
+### Agent loop — 5 beats
+
+```python
+response = client.messages.create(**BASE_REQUEST, messages=messages)
+messages.append({"role": "assistant", "content": response.content})  # always first
+if response.stop_reason != "tool_use":
+    return extract_text(response)                                    # done
+results = execute_all_tool_use_blocks(response)                      # dispatch
+messages.append({"role": "user", "content": results})                # one message
+```
+
+### Tool spec skeleton
+
+```python
+{
+    "name": "tool_name",
+    "description": "What this tool does and when to use it",
+    "input_schema": {
+        "type": "object",
+        "properties": { "param": {"type": "string", "description": "..."} },
+        "required": ["param"]
+    }
+}
+```
+
+### Tool result shape
+
+```python
+{
+    "type": "tool_result",
+    "tool_use_id": tu.id,           # from the tool_use block
+    "content": json.dumps(result),  # must be a string
+    "is_error": False
+}
+```
+
+### Dispatch rules
+
+| Param kind | Access pattern |
+|---|---|
+| Required | `tool_input["key"]` |
+| Optional | `tool_input.get("key")` |
+| Optional w/ default | `tool_input.get("key", default)` |
+
+### Debug prints (uncomment one at a time)
+
+| # | What | Where |
+|---|------|-------|
+| 1 | `stop_reason` + turn count | Right after API call |
+| 2 | Content block types | Right after API call |
+| 3 | Tool name + input → output | Inside dispatch try block |
+| 4 | Full `messages` list | End of loop iteration |
+
+### Fatal mistakes
+
+- Appending assistant message **after** the stop_reason check (skips tool_use blocks)
+- Putting tool results in an `"assistant"` role message (must be `"user"`)
+- Splitting tool results across multiple messages (must be one `"user"` message)
+- Safety return indented inside `while` (must be outside loop, inside function)
+- `{"error"}` is a **set**, not a dict — use `{"error": "msg"}`
