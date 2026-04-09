@@ -136,12 +136,28 @@ messages.append({"role": "user", "content": results})                # one messa
 
 ### Debug prints (uncomment one at a time)
 
-| # | What | Where |
-|---|------|-------|
-| 1 | `stop_reason` + turn count | Right after API call |
-| 2 | Content block types | Right after API call |
-| 3 | Tool name + input → output | Inside dispatch try block |
-| 4 | Full `messages` list | End of loop iteration |
+**1 — Stop reason + turn count** (right after API call)
+```python
+print("Turn {}: stop_reason={}".format(i, response.stop_reason))
+```
+
+**2 — Content block types** (right after API call)
+```python
+for b in response.content:
+    print("  block: type={} name={}".format(b.type, getattr(b, "name", "-")))
+```
+
+**3 — Tool I/O** (inside dispatch try block, wrapping the call)
+```python
+print("  calling {} with {}".format(name, tool_input))
+result = dispatch_tool(name, tool_input)
+print("  got: {}".format(result))
+```
+
+**4 — Full message history** (end of loop iteration, nuclear option)
+```python
+print(json.dumps(messages, indent=2, default=str))
+```
 
 ### Fatal mistakes
 
