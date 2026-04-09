@@ -1,19 +1,13 @@
 """
-Agent Loop — Canonical Reference Implementation
-=================================================
-A complete tool-using agent loop for the Anthropic Messages API.
-Uses if/elif dispatch, json.dumps for tool results, and four
-commented-out debug prints in the correct positions.
-
 ENVIRONMENT ADAPTATION (side by side):
 
   Production (this file):
       response = client.messages.create(**BASE_REQUEST, messages=messages)
 
-  Interview (with pre-provided call_claude helper):
+  Alt (with pre-provided call_claude helper):
       response = call_claude(messages, tools)
 
-  If call_claude is provided, you don't need: client, MODEL, SYSTEM,
+  If call_claude -> you don't need: client, MODEL, SYSTEM,
   BASE_REQUEST, or the anthropic import. Just use call_claude directly.
 
   To change the system prompt for Part 2, either:
@@ -22,8 +16,6 @@ ENVIRONMENT ADAPTATION (side by side):
     (c) If system prompt is in a separate file, edit that file
 
 CODESIGNAL ENVIRONMENT NOTES:
-  - Full Ubuntu Linux environment with terminal access
-  - Python 3.10.6 — match/case syntax IS supported (Python 3.10+)
   - pip install works: run in terminal if a package is missing
   - Filesystem-based: code may be in .py files, not notebook cells
   - To run: use the terminal with `python filename.py`
