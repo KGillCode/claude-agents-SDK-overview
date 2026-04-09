@@ -77,17 +77,17 @@ def evaluate(expression: str):
     raise ValueError("Invalid expression")
 ```
 
-One call handles the full expression: `(195.50 + 162.75 + 425.30) / 3`
+One call handles the full expression: `(300.90 + 522.25 + 147.50) / 3`
 
 ---
 
 ### Building block B: Batch Lookup Tool
 
-**When to use:** They give you a single-item lookup tool (e.g., get one stock price). Replace it with one that accepts a list — returns all values in one call, eliminates multiple parallel lookups.
+**When to use:** They give you a single-item lookup tool (e.g., get one item price). Replace it with one that accepts a list — returns all values in one call, eliminates multiple parallel lookups.
 
 ```python
-def get_stock_prices(tickers: list[str]):
-    return {t: stocks[t.lower()] for t in tickers}
+def get_item_prices(SKUs: list[str]):
+    return {s: items[s.lower()] for s in SKUs}
 ```
 
 Spec param: `"type": "array", "items": {"type": "string"}`
